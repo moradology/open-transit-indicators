@@ -41,7 +41,6 @@ angular.module('transitIndicators')
             warnings: [],
             errors: []
         };
-        $scope.setSidebarCheckmark('upload', false);
     };
 
     /**
@@ -201,6 +200,7 @@ angular.module('transitIndicators')
 
     $scope.$on('pollingUpload:uploadDelete', function () {
         clearUploadProblems();
+        debugger
         $scope.setSidebarCheckmark('upload', false);
 
         // OSM imports get deleted since they have a foreign key
