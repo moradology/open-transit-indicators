@@ -68,6 +68,7 @@ angular.module('transitIndicators', [
             controller: 'OTIScenariosController'
         })
         .state('settings', {
+            abstract: true,
             parent: 'root',
             url: '/settings',
             templateUrl: 'scripts/modules/settings/settings-partial.html',

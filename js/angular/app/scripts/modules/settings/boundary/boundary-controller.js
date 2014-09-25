@@ -92,32 +92,4 @@ angular.module('transitIndicators')
         errors: []
     };
 
-    /*
-     * Initialize the view on page load, setting valid boundary uploads if they exist
-     */
-    $scope.init = function () {
-        // get the global configuration object
-        OTIConfigurationService.Config.query({}, function (configs) {
-            if (configs.length !== 1) {
-                console.error('Expected a single configuration, but found: ', configs);
-                return;
-            }
-            var config = $scope.config = configs[0];
-            var cityId = config.city_boundary;
-            var regionId = config.region_boundary;
-
-            // check for boundaries
-            if (cityId) {
-                OTIBoundaryService.boundaryUploads.get({ id: cityId }, function (upload) {
-                    $scope.uploadCity = upload;
-                });
-            }
-            if (regionId) {
-                OTIBoundaryService.boundaryUploads.get({ id: regionId }, function (upload) {
-                    $scope.uploadRegion = upload;
-                });
-            }
-            setSidebarCheckmark();
-        });
-    };
 }]);
