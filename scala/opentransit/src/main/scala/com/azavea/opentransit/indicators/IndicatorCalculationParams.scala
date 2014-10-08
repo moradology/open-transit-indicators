@@ -24,16 +24,22 @@ object ObservedStopTimes {
   def apply(scheduledSystems: Map[SamplePeriod, TransitSystem])(implicit session: Session): ObservedStopTimes = {
     // This is ugly: a thousand sorries. it also is apparently necessary -
     // we have to index on SamplePeriod and again on trip id
+    println("IN OBSERVEDSTOPTIMES")
+    println(scheduledSystems)
     val observedTrips: Map[SamplePeriod, Map[String, Trip]] = {
       val periods = scheduledSystems.keys
       lazy val observedGtfsRecords =
         new DatabaseGtfsRecords with DefaultProfile {
           override val stopTimesTableName = "gtfs_stop_times_real"
         }
+      println("OBS GTFS REC")
+      println(observedGtfsRecords.routeRecords)
       val builder = TransitSystemBuilder(observedGtfsRecords)
       val observedSystemsMap = periods.map { period =>
         (period -> builder.systemBetween(period.start, period.end))
       }.toMap
+      println(observedSystemsMap)
+      println(observedSystemsMap.values.head.routes)
       observedSystemsMap.map { case (period, system) =>
         period -> system.routes.map { route =>
           route.trips.map { trip =>
@@ -45,6 +51,7 @@ object ObservedStopTimes {
       }
       .toMap
     }
+    println(observedTrips)
     new ObservedStopTimes {
       def observedForTrip(period: SamplePeriod, scheduledTripId: String): Trip =
         observedTrips(period)(scheduledTripId)
@@ -190,6 +197,7 @@ trait IndicatorParams extends StopBuffers
                          with Boundaries
                          with RoadLength
                          with StaticParams
+                         with ObservedStopTimes
 
 /**
  * Returns paramaters
@@ -198,9 +206,12 @@ object DatabaseIndicatorParamsBuilder {
   def apply(request: IndicatorCalculationRequest, systems: Map[SamplePeriod, TransitSystem], db: DatabaseDef): IndicatorParams =
     db withSession { implicit session =>
       val stopBuffers = StopBuffers(systems, request.nearbyBufferDistance)
+      val observedStopTimes = ObservedStopTimes(systems)
 
       new IndicatorParams {
 
+        def observedForTrip(period: SamplePeriod, tripId: String) =
+          observedStopTimes.observedForTrip(period, tripId)
         def bufferForStop(stop: Stop): Polygon = stopBuffers.bufferForStop(stop)
         def bufferForPeriod(period: SamplePeriod): MultiPolygon = stopBuffers.bufferForPeriod(period)
         def totalBuffer: MultiPolygon = stopBuffers.totalBuffer

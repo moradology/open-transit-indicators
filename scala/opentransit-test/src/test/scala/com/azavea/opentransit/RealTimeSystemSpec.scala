@@ -1,6 +1,7 @@
 package com.azavea.opentransit.indicators
 
 import com.azavea.gtfs._
+import com.azavea.gtfs.io.csv._
 import com.azavea.opentransit.io.GtfsIngest
 
 import com.azavea.opentransit.testkit._
@@ -14,11 +15,12 @@ import org.scalatest._
 * it will be easier to reason about
 */
 trait SeptaIndicatorSpec extends FlatSpec with Matchers {
-  val RealTimeRecordss = // Simulated realtime system
+  val realTimeRecords = // Simulated realtime system
     CsvGtfsRecords("/projects/open-transit-indicators/scala/testkit/data/septa_data/")
-  val ScheduleRecs =
+  val schedTimeRecords =
     CsvGtfsRecords("/projects/open-transit-indicators/scala/testkit/data/septa_realtime_data/")
-  val systemBuilder = TransitSystemBuilder()
+  val realTimeSystemBuilder = TransitSystemBuilder(realTimeRecords)
+  val schedTimeSystemBuilder = TransitSystemBuilder(schedTimeRecords)
   val periods =
     Seq(
       SamplePeriod(1, "night",
@@ -42,9 +44,14 @@ trait SeptaIndicatorSpec extends FlatSpec with Matchers {
         new LocalDateTime("2014-05-02T23:59:59.999"))
     )
 
-  val systems =
+  val realTimeSystems =
     periods.map { period =>
-      (period, systemBuilder.systemBetween(period.start, period.end))
+      (period, realTimeSystemBuilder.systemBetween(period.start, period.end))
+    }.toMap
+
+  val schedTimeSystems =
+    periods.map { period =>
+      (period, schedTimeSystemBuilder.systemBetween(period.start, period.end))
     }.toMap
 
 
@@ -56,18 +63,3 @@ trait SeptaIndicatorSpec extends FlatSpec with Matchers {
 }
 
 
-class AdHocDemoSpec extends AdHocSystemIndicatorSpec {
-
-  it should "Calculate the length of our ad hoc routes" in {
-    val calculation = TimeTraveledStops.calculation(allStopsPeriod)
-    val AggregatedResults(byRoute, byRouteType, bySystem) = calculation(systemWithAllStops)
-    implicit val routeMap = byRoute // Use this implicit to DRY out your tests
-
-    routeById("EastRail") should be (50.0)
-    routeById("EastBus") should be (22.0)
-    routeById("NorthSouth") should be (6.0)
-    routeById("WestRail") should be (50.0)
-    routeById("EastWest") should be (6.0)
-    routeById("WestBus") should be (22.0)
-  }
-}

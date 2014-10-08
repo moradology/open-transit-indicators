@@ -1,5 +1,7 @@
 package com.azavea.opentransit.indicators
 
+import org.joda.time.Seconds
+
 import com.azavea.gtfs._
 import com.azavea.opentransit._
 
@@ -7,39 +9,54 @@ import com.azavea.opentransit._
 * This indicator calculates the average distance between
 * arrival times predicted and actually observed
 **/
-object TravelTimePerformance extends Indicator
+class TravelTimePerformance(params: ObservedStopTimes) extends Indicator
                    with AggregatesByAll {
   type Intermediate = Seq[Double]
 
   val name = "travel_time_performance"
 
-  val calculation =
-    new PerTripIndicatorCalculation[Seq[Double]] {
-      def map(trip: Trip): Seq[Double] = {
-        val observedTrip = observedTrips.filter(_.id == trip.id)
+  def calculation(period: SamplePeriod) = {
+    def map(trip: Trip): Seq[Double] = {
+      val observedTrip = params.observedForTrip(period, trip.id)
+      println(observedTrip)
 
-        val schedIdToArrival = for {
+      val schedIdToArrival = {
+        for {
           schedStop <- trip.schedule
-        } yield (schedStop.id -> schedStop.arrivalTime)
-        val obsIdToArrival = for {
+        } yield (schedStop.stop.id -> schedStop.arrivalTime)
+      }.toMap
+      val obsIdToArrival = {
+        for {
           obsStop <- observedTrip.schedule
-        } yield (obsStop.id -> obsStop.arrivalTime)
+        } yield (obsStop.stop.id -> obsStop.arrivalTime)
+      }.toMap
 
-        Seq(schedIdToArrival, obsIdToArrival)
-          .combineMaps
-          .values
-          .map { case (t1, t2) =>
-            (Seconds.secondsBetween(t1, t2).getSeconds / 60 / 60).toDouble
-          }.toSeq
+      println("=============================")
+      println(schedIdToArrival)
+      println(obsIdToArrival)
+      println("=============================")
+      schedIdToArrival.keys.map { key =>
+        Seconds.secondsBetween(schedIdToArrival(key),
+                               obsIdToArrival(key))
+          .getSeconds
+          .toDouble / 60
+      }.toSeq
+      /*
+      Seq(schedIdToArrival, obsIdToArrival)
+        .values.
+        .map { case (t1, t2) =>
+          (Seconds.secondsBetween(t1, t2).getSeconds / 60 / 60).toDouble
+        }.toSeq*/
 
-      }
-
-      def reduce(timeDeltas: Seq[Double]): Double = {
-        val (total, count) =
-          timeDeltas.flatten.foldLeft((0.0, 0)) { case ((total, count), diff) =>
-            (total + diff, count + 1)
-          }
-        if (count > 0) total / count else 0.0
-      }
     }
+
+    def reduce(timeDeltas: Seq[Seq[Double]]): Double = {
+      val (total, count) =
+        timeDeltas.flatten.foldLeft((0.0, 0)) { case ((total, count), diff) =>
+          (total + diff, count + 1)
+        }
+      if (count > 0) total / count else 0.0
+    }
+    perTripCalculation(map, reduce)
   }
+}

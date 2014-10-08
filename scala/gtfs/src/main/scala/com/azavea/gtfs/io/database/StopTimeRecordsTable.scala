@@ -8,7 +8,7 @@ import geotrellis.slick._
 trait StopTimeRecordsTable { this: Profile  =>
   import profile.simple._
 
-  class StopTimeRecords(tag: Tag) extends Table[StopTimeRecord](tag, this.stopTimesTableName) {
+  class StopTimeRecords(tag: Tag) extends Table[StopTimeRecord](tag, stopTimesTableName) {
     def stop_id = column[String]("stop_id")
     def trip_id = column[String]("trip_id")
     def stop_sequence = column[Int]("stop_sequence")
@@ -19,5 +19,5 @@ trait StopTimeRecordsTable { this: Profile  =>
     def * = (stop_id, trip_id, stop_sequence, arrival_time, departure_time, shape_dist_traveled) <>
       (StopTimeRecord.tupled, StopTimeRecord.unapply)
   }
-  val stopTimeRecordsTable = TableQuery[StopTimeRecords]
+  def stopTimeRecordsTable = TableQuery[StopTimeRecords]
 }
