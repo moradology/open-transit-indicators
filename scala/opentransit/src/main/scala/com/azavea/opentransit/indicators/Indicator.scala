@@ -22,7 +22,7 @@ object Indicators {
     List(
       new CoverageRatioStopsBuffer(params),
       new TransitNetworkDensity(params),
-      new TravelTimePerformance(params)
+      new TravelTimePerformance(params),
       new Affordability(params)
     )
 
