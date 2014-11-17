@@ -35,6 +35,7 @@ object CalculateIndicators {
     system: TransitSystem,
     stateHolder: mutable.Map[String, mutable.Map[SamplePeriod, AggregatedResults]]
   ): Unit = {
+    System.gc()
     try {
       println(s"Processing indicator ${indicator.name}")
       timedTask(s"Processed indicator ${indicator.name} in period ${period.periodType}") {
@@ -111,6 +112,7 @@ object CalculateIndicators {
           println("Could not create travelshed graph")
       }
     }
+    System.gc()
   }
 
   def genSysGeom(
@@ -136,6 +138,16 @@ object CalculateIndicators {
     SystemBufferGeometries(system, systemBuffers)
   }
 
+  def satisfiedIndicators(
+    request: IndicatorCalculationRequest,
+    builder: TransitSystemBuilder,
+    period: SamplePeriod,
+    dbByName: String => Database
+  ): Seq[String] = {
+    val sys = builder.systemBetween(period.start, period.end)
+    Indicators.list(IndicatorParams(request, sys, period, dbByName)).map(_.name)
+  }
+
   def runAllCalculations(
     builder: TransitSystemBuilder,
     dbByName: String => Database,
@@ -143,10 +155,21 @@ object CalculateIndicators {
     request: IndicatorCalculationRequest,
     statusManager: CalculationStatusManager
   ): Unit = {
+    // Each of these holds data collected over the course of iteration so that the GC
+    // can remove as much as possible after each iteration
+    val resultHolder = mutable.Map[String, mutable.Map[SamplePeriod, AggregatedResults]]()
+    val allBuffers = mutable.Map[SamplePeriod, SystemBufferGeometries]()
+    val periodGeoms = periods.map { period =>
+      period ->  genSysGeom(builder.systemBetween(period.start, period.end))
+    }.toMap
+    val overallLineGeoms = SystemLineGeometries.merge(periodGeoms.values.toSeq)
 
     // Helper for tracking indicator calculation status
     val trackStatus = {
-      val status = mutable.Map[String, JobStatus]()
+      val status = mutable.Map[String, JobStatus]() ++
+        satisfiedIndicators(request, builder, periods.head, dbByName)
+          .map(name => (name, JobStatus.Submitted))
+
       (indicatorName: String, newStatus: JobStatus) => {
         status(indicatorName) = newStatus
         statusManager.statusChanged(status.toMap)
@@ -154,20 +177,12 @@ object CalculateIndicators {
     }
 
     val calculateAllTime = request.samplePeriods.length != periods.length
-    // Each of these holds data collected over the course of iteration so that the GC
-    // can remove as much as possible after each iteration
-    val resultHolder = mutable.Map[String, mutable.Map[SamplePeriod, AggregatedResults]]()
-    val allBuffers = mutable.Map[SamplePeriod, SystemBufferGeometries]()
     // This iterator will run through all the periods, generating a system for each
     // The bulk of calculations are done here
     println("running travelshed")
     runTravelshed(periods, builder, request, dbByName(request.auxDbName), trackStatus)
     println("notrunning travelshed")
 
-    val periodGeoms = periods.map { period =>
-      period ->  genSysGeom(builder.systemBetween(period.start, period.end))
-    }.toMap
-    val overallLineGeoms = SystemLineGeometries.merge(periodGeoms.values.toSeq)
     runWeeklySvcHours(periods, builder, overallLineGeoms, statusManager, calculateAllTime, trackStatus)
 
     for (period <- periods) {
@@ -183,8 +198,6 @@ object CalculateIndicators {
         singleCalculation(indicator, period, system, resultHolder)
       }
     }
-println(1)
-println(2)
 
     resultHolder.map { case (indicatorName, periodToResults) =>
       val periodIndicatorResults: Seq[ContainerGenerator] =
@@ -206,22 +219,17 @@ println(2)
         }
         .toSeq
         .flatten
-println(3)
 
       if (!calculateAllTime) {
-println(4)
         statusManager.indicatorFinished(periodIndicatorResults)
       } else {
-println(5)
         val overallResults: AggregatedResults = PeriodResultAggregator(periodToResults)
         val overallIndicatorResults: Seq[ContainerGenerator] =
           OverallIndicatorResult.createContainerGenerators(indicatorName,
                                                            overallResults,
                                                            overallLineGeoms: SystemLineGeometries)
-println(6)
         statusManager.indicatorFinished(periodIndicatorResults ++ overallIndicatorResults)
       }
-println(7)
       trackStatus(indicatorName, JobStatus.Complete)
       statusManager.statusChanged(Map(indicatorName -> JobStatus.Complete))
     }
